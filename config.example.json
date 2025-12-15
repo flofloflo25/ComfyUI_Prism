@@ -1,0 +1,20 @@
+{
+    "prism_root": "C:\\Program Files\\Prism2",
+    "ffmpeg_path": "bin\\ffmpeg.exe",
+    "prism_projects_file": "prism_projects.json",
+
+    "_comments": {
+        "prism_root": "Chemin vers l'installation de Prism",
+        "ffmpeg_path": "Chemin vers ffmpeg.exe (relatif au dossier du plugin ou absolu)",
+        "prism_projects_file": "Nom du fichier contenant la liste des projets Prism"
+    },
+
+    "_examples": {
+        "prism_root_windows": "C:\\Program Files\\Prism2",
+        "prism_root_linux": "/opt/Prism2",
+        "prism_root_mac": "/Applications/Prism2",
+        "ffmpeg_path_relative": "bin\\ffmpeg.exe",
+        "ffmpeg_path_absolute": "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        "ffmpeg_path_prism": "C:\\Users\\USERNAME\\AppData\\Local\\Temp\\Prism\\Update\\extract\\Tools\\FFmpeg\\bin\\ffmpeg.exe"
+    }
+}

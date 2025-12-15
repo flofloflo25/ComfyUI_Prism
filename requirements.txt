@@ -1,0 +1,17 @@
+# Requirements pour ComfyUI_prism
+# Ces dépendances sont nécessaires pour le bon fonctionnement des nodes Prism
+
+# OpenCV pour le chargement et traitement vidéo
+opencv-python>=4.5.0
+
+# Pillow pour le traitement d'images (généralement déjà installé avec ComfyUI)
+Pillow>=9.0.0
+
+# NumPy pour les opérations sur les arrays (généralement déjà installé avec ComfyUI)
+numpy>=1.21.0
+
+# PyTorch (généralement déjà installé avec ComfyUI)
+# torch>=2.0.0
+
+# Note: torch est commenté car il doit être installé avec la bonne version CUDA
+# pour votre système. ComfyUI l'installe déjà avec la configuration appropriée.

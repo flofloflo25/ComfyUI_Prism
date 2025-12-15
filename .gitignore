@@ -1,0 +1,18 @@
+# Configuration personnelle
+config.json
+
+# FFmpeg binaire (à télécharger via download_ffmpeg.py)
+bin/ffmpeg.exe
+bin/ffmpeg
+
+# Fichiers temporaires
+temp_ffmpeg/
+__pycache__/
+*.pyc
+*.pyo
+
+# Prism projects cache
+prism_projects.json
+
+# Logs
+*.log
