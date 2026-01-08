@@ -16,3 +16,6 @@ prism_projects.json
 
 # Logs
 *.log
+
+# VS Code workspace files (personnel)
+*.code-workspace

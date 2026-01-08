@@ -55,19 +55,33 @@ Si vous préférez installer ffmpeg manuellement ou utiliser une installation ex
 ## Nodes disponibles
 
 ### 1. **PrismSaveImage**
-Sauvegarde des images dans l'arborescence Prism.
+Sauvegarde des images dans l'arborescence Prism (pour shots et assets).
 
 **Paramètres :**
 - `project_path` : Chemin du projet Prism
 - `entity_type` : Type (asset ou shot)
-- `sequence_name` : Nom de la séquence
-- `shot_name` : Nom du shot
+- `sequence_name` : Nom de la séquence (requis pour shots)
+- `shot_name` : Nom du shot (requis pour shots)
 - `version` : Version (auto ou manuelle)
 - `identifier` : Nom du dossier de rendu
 - `filename_prefix` : Préfixe des fichiers
+- `format` : Format d'image (png, jpeg, exr)
+- `colorspace` : Colorspace (Linear, sRGB, ACEScg, Rec709)
 
-### 2. **PrismLoadImage**
-Charge des images depuis l'arborescence Prism.
+### 2. **PrismSaveAsset**
+Sauvegarde des images en tant qu'asset Prism (workflow simplifié pour assets).
+
+**Paramètres :**
+- `project_path` : Chemin du projet Prism
+- `asset_name` : Nom de l'asset
+- `version` : Version (auto ou manuelle)
+- `identifier` : Nom du dossier de rendu
+- `filename_prefix` : Préfixe des fichiers
+- `format` : Format d'image (png, jpeg, exr)
+- `colorspace` : Colorspace (Linear, sRGB, ACEScg, Rec709)
+
+### 3. **PrismLoadImage**
+Charge des images (shots) depuis l'arborescence Prism.
 
 **Paramètres :**
 - `project_path` : Chemin du projet Prism
@@ -76,8 +90,24 @@ Charge des images depuis l'arborescence Prism.
 - `identifier` : Identifiant du rendu
 - `version` : Version à charger (latest par défaut)
 - `limit` : Limiter le nombre d'images
+- `show_preview` : Afficher preview des images chargées
 
-### 3. **PrismSaveVideo**
+**Note :** Bouton "Update Preview" disponible pour recharger les images.
+
+### 4. **PrismLoadAsset**
+Charge des images (assets) depuis l'arborescence Prism.
+
+**Paramètres :**
+- `project_path` : Chemin du projet Prism
+- `asset_name` : Nom de l'asset
+- `identifier` : Identifiant du rendu
+- `version` : Version à charger (latest par défaut)
+- `limit` : Limiter le nombre d'images
+- `show_preview` : Afficher preview des images chargées
+
+**Note :** Bouton "Update Preview" disponible pour recharger les images.
+
+### 5. **PrismSaveVideo**
 Sauvegarde des séquences d'images en vidéo dans Prism.
 
 **Paramètres :**
@@ -87,9 +117,9 @@ Sauvegarde des séquences d'images en vidéo dans Prism.
 - `format` : Format vidéo (mp4, mov, avi, webm)
 - `quality` : Qualité (high, medium, low)
 
-**Note :** Nécessite ffmpeg configuré dans le code.
+**Note :** Nécessite ffmpeg configuré dans config.json.
 
-### 4. **PrismLoadVideo**
+### 6. **PrismLoadVideo**
 Charge des vidéos depuis l'arborescence Prism et les convertit en séquence d'images.
 
 **Paramètres :**
@@ -103,7 +133,7 @@ Charge des vidéos depuis l'arborescence Prism et les convertit en séquence d'i
 - `frame_count` : Nombre de frames
 - `fps` : Frame rate
 
-### 5. **PrismScanProject**
+### 7. **PrismScanProject**
 Scanne un projet Prism et liste les assets, séquences et shots disponibles.
 
 ## Configuration requise

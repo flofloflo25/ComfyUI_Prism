@@ -13,5 +13,10 @@ numpy>=1.21.0
 # PyTorch (généralement déjà installé avec ComfyUI)
 # torch>=2.0.0
 
+# OpenEXR pour le support des fichiers EXR (optionnel mais recommandé)
+# Si non installé, OpenCV sera utilisé en fallback
+# OpenEXR>=1.3.0
+
 # Note: torch est commenté car il doit être installé avec la bonne version CUDA
 # pour votre système. ComfyUI l'installe déjà avec la configuration appropriée.
+# Note: OpenEXR est commenté car optionnel. Décommentez pour activer le support EXR complet.

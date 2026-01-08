@@ -889,8 +889,204 @@ class PrismSaveImage:
         return frame_count, results
 
 
+class PrismSaveAsset:
+    """Dedicated node for saving images as Prism assets (simplified asset-only workflow)."""
+
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
+        self.type = "output"
+        self.prefix_append = ""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+                "project_path": ("STRING", {"default": "D:/_RnD/Prism_RND/Prism_RnD"}),
+                "asset_name": ("STRING", {"default": "Asset"}),
+                "version": ("STRING", {"default": "auto"}),
+                "identifier": ("STRING", {"default": "comfy"}),
+                "filename_prefix": ("STRING", {"default": "ComfyUI"}),
+            },
+            "optional": {
+                "format": (["png", "jpeg", "exr"], {"default": "png"}),
+                "jpeg_quality": ("INT", {"default": 95, "min": 1, "max": 100}),
+                "colorspace": (["Linear", "sRGB", "ACEScg", "Rec709"], {"default": "sRGB"}),
+                "type": (["2D", "3D", "Playblast", "External"], {"default": "2D"}),
+                "comment": ("STRING", {"default": ""}),
+                "prompt_text": ("STRING", {"default": "", "multiline": True}),
+                "save_versioninfo": ("BOOLEAN", {"default": True}),
+            },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
+    FUNCTION = "save_images"
+    OUTPUT_NODE = True
+    CATEGORY = "Prism"
+
+    def save_images(self, images, project_path, asset_name, version, identifier,
+                   filename_prefix, format="png", jpeg_quality=95, colorspace="sRGB",
+                   type="2D", comment="", prompt_text="", save_versioninfo=True,
+                   prompt=None, extra_pnginfo=None):
+
+        asset_name = (asset_name or "").strip() or "Asset"
+
+        project_data = {
+            "name": os.path.basename(os.path.normpath(project_path)),
+            "path": project_path,
+        }
+
+        # Build output directory for asset
+        output_dir = self._build_2d_render_path(
+            project_data=project_data,
+            asset_name=asset_name,
+            version=version,
+            identifier=identifier,
+        )
+
+        # Save images
+        frame_count, results = PrismSaveImage._save_tensor_images(
+            images=images,
+            target_dir=output_dir,
+            filename_prefix=filename_prefix,
+            format=format,
+            jpeg_quality=jpeg_quality,
+            colorspace=colorspace,
+            prompt=prompt,
+            extra_pnginfo=extra_pnginfo,
+        )
+
+        # Copy images to ComfyUI output for preview
+        preview_results = []
+        for result in results:
+            src_path = os.path.join(output_dir, result["filename"])
+            dst_path = os.path.join(self.output_dir, result["filename"])
+
+            try:
+                shutil.copy2(src_path, dst_path)
+                preview_results.append({
+                    "filename": result["filename"],
+                    "subfolder": "",
+                    "type": "output"
+                })
+            except Exception as e:
+                print(f"⚠ Impossible de copier l'image pour le preview: {e}")
+
+        # Save versioninfo.json if requested
+        if save_versioninfo:
+            version_folder = os.path.basename(output_dir)
+
+            try:
+                username = getpass.getuser()
+            except Exception:
+                username = os.getenv('USERNAME', 'unknown')
+
+            project_name = os.path.basename(os.path.normpath(project_path))
+            date_str = datetime.now().strftime("%d.%m.%y %H:%M:%S")
+
+            file_extension = "jpg" if format == "jpeg" else format
+            output_pattern = os.path.join(
+                output_dir,
+                f"{filename_prefix}_####.{file_extension}"
+            )
+
+            try:
+                info_path = os.path.join(output_dir, "versioninfo.json")
+
+                versioninfo_data = {
+                    "hierarchy": asset_name,
+                    "itemType": "asset",
+                    "asset": asset_name,
+                    "type": "asset",
+                    "identifier": identifier,
+                    "user": username.lower(),
+                    "version": version_folder,
+                    "comment": comment or "",
+                    "extension": f".{file_extension}",
+                    "mediaType": "2drenders",
+                    "username": username,
+                    "date": date_str,
+                    "colorspace": colorspace,
+                    "dependencies": [],
+                    "externalFiles": []
+                }
+
+                if prompt_text and prompt_text.strip():
+                    versioninfo_data["prompt"] = prompt_text.strip()
+
+                with open(info_path, "w", encoding="utf-8") as f:
+                    json.dump(versioninfo_data, f, indent=4, ensure_ascii=False)
+                print(f"✓ versioninfo.json sauvegardé : {info_path}")
+                print(f"  Asset: '{asset_name}'")
+                print(f"  Commentaire : '{comment}'")
+                if prompt_text and prompt_text.strip():
+                    print(f"  Prompt inclus dans le JSON")
+            except Exception:
+                import traceback
+                print("⚠ Impossible d'écrire versioninfo.json :")
+                print(traceback.format_exc())
+
+        print(f"✓ Images sauvegardées dans Prism (Asset) : {output_dir}")
+        print(f"  Format: {format}, Colorspace: {colorspace}")
+
+        return {"ui": {"images": preview_results}, "result": (images,)}
+
+    def _build_2d_render_path(self, project_data, asset_name, version, identifier):
+        """Build the 2D render path for an asset from pipeline.json."""
+        cfg = PrismSaveImage._read_pipeline_config(project_data)
+        folder_structure = cfg.get("folder_structure", {})
+        globals_cfg = cfg.get("globals", {})
+
+        project_path = project_data.get("path")
+        if not project_path:
+            raise Exception(
+                f"Aucun 'path' défini pour le projet '{project_data.get('name')}'."
+            )
+
+        # Build asset path
+        assets_tpl = folder_structure.get("assets", {}).get("value")
+        if not assets_tpl:
+            raise Exception("Template 'assets' manquant dans pipeline.json.")
+
+        entity_path = assets_tpl.replace("@project_path@", project_path)
+        entity_path = entity_path.replace("@asset_path@", asset_name)
+
+        # Build 2d renders path
+        renders2d_tpl = folder_structure.get("2drenders", {}).get("value")
+        if not renders2d_tpl:
+            raise Exception("Template '2drenders' manquant dans pipeline.json.")
+
+        render_root = renders2d_tpl.replace("@entity_path@", entity_path)
+        render_root = render_root.replace("@identifier@", identifier)
+
+        # Versioning
+        render_versions_tpl = folder_structure.get("renderVersions", {}).get("value")
+        if not render_versions_tpl:
+            raise Exception("Template 'renderVersions' manquant dans pipeline.json.")
+
+        version_padding = int(globals_cfg.get("versionPadding", 4))
+        normalized_version = PrismSaveImage._normalize_version_string(version, version_padding)
+
+        if normalized_version is None:
+            normalized_version = PrismSaveImage._next_version_in_dir(render_root, version_padding)
+
+        render_version_path = render_versions_tpl.replace("@render_path@", render_root)
+        render_version_path = render_version_path.replace("@version@", normalized_version)
+
+        os.makedirs(render_version_path, exist_ok=True)
+        return render_version_path
+
+
 class PrismLoadImage:
     """Node utilitaire pour relire les rendus Prism (2D) depuis un projet."""
+
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -905,6 +1101,8 @@ class PrismLoadImage:
                 # Spécifier une version (ex: v0003). Si "latest" ou vide -> dernière.
                 "version": ("STRING", {"default": "latest"}),
                 "limit": ("INT", {"default": 0, "min": 0, "max": 9999}),
+                # Afficher une preview des images chargées
+                "show_preview": ("BOOLEAN", {"default": True}),
                 # Champ factice pour forcer le recalcul (à connecter à un seed, timestamp, etc.)
                 "force_refresh": ("STRING", {"default": ""}),
             }
@@ -913,6 +1111,7 @@ class PrismLoadImage:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("images",)
     FUNCTION = "load_images"
+    OUTPUT_NODE = True
     CATEGORY = "Prism"
 
     def load_images(
@@ -923,6 +1122,7 @@ class PrismLoadImage:
         identifier,
         version="latest",
         limit=0,
+        show_preview=True,
         force_refresh="",
     ):
         project_data = {
@@ -1060,7 +1260,232 @@ class PrismLoadImage:
 
         images_np = np.stack(images, axis=0)
         images_tensor = torch.from_numpy(images_np)
-        return (images_tensor,)
+
+        # Gérer la preview si demandée
+        if show_preview:
+            preview_results = []
+            for idx, img_path in enumerate(image_files[:len(images)]):
+                # Créer un nom de fichier unique pour la preview
+                original_filename = os.path.basename(img_path)
+                filename_base, filename_ext = os.path.splitext(original_filename)
+                preview_filename = f"prism_preview_{filename_base}_{idx:04d}{filename_ext}"
+
+                # Copier l'image dans le dossier output pour la preview
+                dst_path = os.path.join(self.output_dir, preview_filename)
+
+                try:
+                    shutil.copy2(img_path, dst_path)
+                    preview_results.append({
+                        "filename": preview_filename,
+                        "subfolder": "",
+                        "type": "output"
+                    })
+                except Exception as e:
+                    print(f"⚠ Impossible de copier l'image pour le preview: {e}")
+
+            print(f"✓ Preview activée : {len(preview_results)} image(s) copiée(s) dans {self.output_dir}")
+            return {"ui": {"images": preview_results}, "result": (images_tensor,)}
+
+        return {"ui": {"images": []}, "result": (images_tensor,)}
+
+
+class PrismLoadAsset:
+    """Node utilitaire pour charger les rendus d'assets Prism (2D) depuis un projet."""
+
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "project_path": ("STRING", {"default": "D:/_RnD/Prism_RND/Prism_RnD"}),
+                "asset_name": ("STRING", {"default": ""}),
+                "identifier": ("STRING", {"default": "comfy"}),
+            },
+            "optional": {
+                # Spécifier une version (ex: v0003). Si "latest" ou vide -> dernière.
+                "version": ("STRING", {"default": "latest"}),
+                "limit": ("INT", {"default": 0, "min": 0, "max": 9999}),
+                # Afficher une preview des images chargées
+                "show_preview": ("BOOLEAN", {"default": True}),
+                # Champ factice pour forcer le recalcul (à connecter à un seed, timestamp, etc.)
+                "force_refresh": ("STRING", {"default": ""}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("images",)
+    FUNCTION = "load_images"
+    OUTPUT_NODE = True
+    CATEGORY = "Prism"
+
+    def load_images(
+        self,
+        project_path,
+        asset_name,
+        identifier,
+        version="latest",
+        limit=0,
+        show_preview=True,
+        force_refresh="",
+    ):
+        project_data = {
+            "name": os.path.basename(os.path.normpath(project_path)),
+            "path": project_path,
+        }
+
+        asset_name = (asset_name or "").strip()
+        identifier = (identifier or "").strip()
+
+        if not asset_name:
+            raise Exception("asset_name est requis pour charger un asset Prism.")
+        if not identifier:
+            raise Exception("identifier est requis (ex: comfy, paintover, etc.).")
+
+        cfg = PrismSaveImage._read_pipeline_config(project_data)
+        folder_structure = cfg.get("folder_structure", {})
+        globals_cfg = cfg.get("globals", {})
+        project_dir = project_data["path"]
+
+        assets_tpl = folder_structure.get("assets", {}).get("value")
+        renders2d_tpl = folder_structure.get("2drenders", {}).get("value")
+        render_versions_tpl = folder_structure.get("renderVersions", {}).get("value")
+
+        if not (assets_tpl and renders2d_tpl and render_versions_tpl):
+            raise Exception(
+                "Templates 'assets', '2drenders' ou 'renderVersions' "
+                "manquants dans pipeline.json."
+            )
+
+        # Construire le chemin de l'asset
+        entity_path = assets_tpl.replace("@project_path@", project_dir)
+        entity_path = entity_path.replace("@asset_path@", asset_name)
+
+        render_root = renders2d_tpl.replace("@entity_path@", entity_path)
+        render_root = render_root.replace("@identifier@", identifier)
+
+        render_versions_dir = render_versions_tpl.replace("@render_path@", render_root)
+        version_base_dir = render_versions_dir.replace("@version@", "")
+        version_base_dir = version_base_dir.rstrip("/\\") or render_root
+        version_padding = int(globals_cfg.get("versionPadding", 4))
+
+        if not version or version.lower() == "latest":
+            version_folder = PrismSaveImage._latest_version_in_dir(version_base_dir)
+            if not version_folder:
+                raise Exception(
+                    f"Aucune version trouvée dans {render_root}. Vérifie le chemin."
+                )
+        else:
+            version_folder = PrismSaveImage._normalize_version_string(
+                version, version_padding
+            )
+
+        version_path = render_versions_dir.replace("@version@", version_folder)
+        if not os.path.exists(version_path):
+            raise Exception(f"Dossier de version introuvable : {version_path}")
+
+        image_files = [
+            os.path.join(version_path, f)
+            for f in sorted(os.listdir(version_path))
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".exr"))
+        ]
+
+        if not image_files:
+            raise Exception(f"Aucune image trouvée dans {version_path}")
+
+        if limit > 0:
+            image_files = image_files[:limit]
+
+        images = []
+        for path in image_files:
+            # Charger les fichiers EXR avec OpenCV ou OpenEXR
+            if path.lower().endswith(".exr"):
+                try:
+                    # Tenter avec OpenCV d'abord (plus simple)
+                    img_bgr = cv2.imread(path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
+                    if img_bgr is None:
+                        raise Exception(f"Impossible de charger {path} avec OpenCV")
+
+                    # Convertir BGR vers RGB
+                    if img_bgr.ndim == 3 and img_bgr.shape[2] == 3:
+                        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+                    else:
+                        img_rgb = img_bgr
+
+                    # Les données EXR sont déjà en float32, on s'assure qu'elles sont dans [0, 1]
+                    arr = np.clip(img_rgb, 0, 1).astype(np.float32)
+                    images.append(arr)
+
+                except Exception:
+                    # Fallback sur OpenEXR
+                    try:
+                        import OpenEXR
+                        import Imath
+
+                        exr_file = OpenEXR.InputFile(path)
+                        header = exr_file.header()
+
+                        dw = header['dataWindow']
+                        width = dw.max.x - dw.min.x + 1
+                        height = dw.max.y - dw.min.y + 1
+
+                        # Lire les canaux RGB
+                        pt = Imath.PixelType(Imath.PixelType.FLOAT)
+                        r_str = exr_file.channel('R', pt)
+                        g_str = exr_file.channel('G', pt)
+                        b_str = exr_file.channel('B', pt)
+
+                        # Convertir en numpy
+                        r = np.frombuffer(r_str, dtype=np.float32).reshape(height, width)
+                        g = np.frombuffer(g_str, dtype=np.float32).reshape(height, width)
+                        b = np.frombuffer(b_str, dtype=np.float32).reshape(height, width)
+
+                        # Combiner les canaux
+                        arr = np.stack([r, g, b], axis=-1)
+                        arr = np.clip(arr, 0, 1).astype(np.float32)
+                        images.append(arr)
+
+                    except Exception as e:
+                        print(f"⚠ Impossible de charger {path}: {e}")
+                        print("  Installez OpenCV ou OpenEXR: pip install opencv-python ou pip install OpenEXR")
+                        raise
+            else:
+                # Charger avec PIL pour les autres formats
+                with Image.open(path) as img:
+                    img = img.convert("RGB")
+                    arr = np.array(img).astype(np.float32) / 255.0
+                    images.append(arr)
+
+        images_np = np.stack(images, axis=0)
+        images_tensor = torch.from_numpy(images_np)
+
+        # Gérer la preview si demandée
+        if show_preview:
+            preview_results = []
+            for idx, img_path in enumerate(image_files[:len(images)]):
+                # Créer un nom de fichier unique pour la preview
+                original_filename = os.path.basename(img_path)
+                filename_base, filename_ext = os.path.splitext(original_filename)
+                preview_filename = f"prism_asset_preview_{filename_base}_{idx:04d}{filename_ext}"
+
+                # Copier l'image dans le dossier output pour la preview
+                dst_path = os.path.join(self.output_dir, preview_filename)
+
+                try:
+                    shutil.copy2(img_path, dst_path)
+                    preview_results.append({
+                        "filename": preview_filename,
+                        "subfolder": "",
+                        "type": "output"
+                    })
+                except Exception as e:
+                    print(f"⚠ Impossible de copier l'image pour le preview: {e}")
+
+            print(f"✓ Preview activée : {len(preview_results)} image(s) copiée(s) dans {self.output_dir}")
+            return {"ui": {"images": preview_results}, "result": (images_tensor,)}
+
+        return {"ui": {"images": []}, "result": (images_tensor,)}
 
 
 class PrismLoadVideo:
@@ -1573,7 +1998,9 @@ class PrismSaveVideo:
 # Node registration
 NODE_CLASS_MAPPINGS = {
     "PrismSaveImage": PrismSaveImage,
+    "PrismSaveAsset": PrismSaveAsset,
     "PrismLoadImage": PrismLoadImage,
+    "PrismLoadAsset": PrismLoadAsset,
     "PrismScanProject": PrismScanProject,
     "PrismSaveVideo": PrismSaveVideo,
     "PrismLoadVideo": PrismLoadVideo,
@@ -1581,7 +2008,9 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PrismSaveImage": "Save Image (Prism Pipeline)",
+    "PrismSaveAsset": "Save Asset (Prism Pipeline)",
     "PrismLoadImage": "Load Image (Prism Pipeline)",
+    "PrismLoadAsset": "Load Asset (Prism Pipeline)",
     "PrismScanProject": "Scan Project (Prism Pipeline)",
     "PrismSaveVideo": "Save Video (Prism Pipeline)",
     "PrismLoadVideo": "Load Video (Prism Pipeline)",
